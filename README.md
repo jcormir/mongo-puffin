@@ -1,2 +1,3 @@
 # mongo-puffin
- MongoDB tools that you don't know you need
+
+MongoDB tools that you didn't know you needed until now
