@@ -125,6 +125,30 @@ let mpModule = (function() {
         return values.join("");
     }
 
+    // MongoDB Performance Tuning, page 212
+    function txn_counts() {
+	var ssTxns = db.serverStatus().transactions;
+
+	print(ssTxns.totalStarted + 0, 'transactions started');
+	print(ssTxns.totalAborted + 0, 'transactions aborted');
+	print(ssTxns.totalCommitted + 0, 'transactions committed');
+
+	var percentageAborted = Math.round(ssTxns.totalAborted * 100 / ssTxns.totalStarted);
+	if (ssTxns.totalStarted == 0) percentageAborted = 0;
+
+	return percentageAborted + "% txns aborted";
+    }
+
+    function ping() {
+	let startTime = new Date();
+        let pong = db.runCommand("ping");
+	let endTime = new Date();
+	let timeDiff = endTime - startTime;
+	let ok = pong.ok;
+	
+	return "P0NG! " + timeDiff + "ms, ok: " + ok;
+    }
+
     // Expose the public functions
     return {
         version: version,
@@ -133,7 +157,9 @@ let mpModule = (function() {
         os: os,
         time: time,
         mname: mname,
-        uptime: uptime
+        uptime: uptime,
+	txn_counts: txn_counts,
+        ping: ping
     };
 })();
 
