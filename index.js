@@ -1,5 +1,6 @@
- // Create the namespace object
+// Create the namespace object
 const mp = {};
+const atlas_hosted = "Collection command aggregate stage $search is available only on MongoDB Atlas";
 
 function _countFunctions(obj) {
     var count = 0;
@@ -21,14 +22,35 @@ function _loadFunctions(obj, ns) {
     }
 }
 
+function _version() {
+    var versionString = db.version();
+    var versionParts = versionString.split('.');
+  
+    var majorVersion = parseInt(versionParts[0]);
+    var minorVersion = parseInt(versionParts[1]);
+    var patchVersion = parseInt(versionParts[2]);
+    
+    return {
+      major: majorVersion,
+      minor: minorVersion,
+      patch: patchVersion
+    };
+}
+
+function _is_atlas() {
+    return db.runCommand({ connectionStatus: 1 }).authInfo.isAtlas;
+}
+
 // Module
 let mpModule = (function() {
     let version = "0.1";
 
+    // Collect host, server build, atlas connection, and server version
     let host_info = db.hostInfo();
     let server_build_info = db.serverBuildInfo();
-    let server_status = db.serverStatus();
-    
+    let is_atlas = _is_atlas();
+    let server_version = _version();
+
     function arch() {
         return db.serverBits();
     }
@@ -82,7 +104,9 @@ let mpModule = (function() {
     }
 
     function uptime() {
-        // Uptime
+    	let server_status = db.serverStatus();
+        
+	// Uptime
         let uptime_seconds = server_status.uptime;
         let uptime_days = Math.floor(uptime_seconds / (24 * 60 * 60));
         let uptime_hours = Math.floor((uptime_seconds % (24 * 60 * 60)) / (60 * 60));
@@ -127,7 +151,8 @@ let mpModule = (function() {
 
     // MongoDB Performance Tuning, page 212
     function txn_counts() {
-        let ss_txns = db.serverStatus().transactions;
+    	let server_status = db.serverStatus();
+	let ss_txns = server_status.transactions;
     
         print(ss_txns.totalStarted + 0, 'transactions started');
         print(ss_txns.totalAborted + 0, 'transactions aborted');
@@ -140,9 +165,9 @@ let mpModule = (function() {
     }
 
     function ping() {
-	    let start_time = new Date();
+	let start_time = new Date();
         let pong = db.runCommand("ping");
-	    let end_time = new Date();
+	let end_time = new Date();
         let time_diff = end_time - start_time;
         let ok = pong.ok;
         let ping_msg = "P0NG! " + time_diff + "ms, ok: " + ok;
@@ -156,19 +181,20 @@ let mpModule = (function() {
     	let server_stats = db.serverStatus();
         let wired_tiger_cache_size = Math.round(server_stats.wiredTiger.cache['bytes currently in the cache'] / 1048576);
 
-        mem_msg = `Mongod virtual memory:  ${serverStats.mem.virtual}MB\n`;
-        mem_msg += `Mongod resident memory: ${serverStats.mem.resident}MB\n`;
+        mem_msg = `Mongod virtual memory:  ${server_stats.mem.virtual}MB\n`;
+        mem_msg += `Mongod resident memory: ${server_stats.mem.resident}MB\n`;
         mem_msg += `WiredTiger cache size:  ${wired_tiger_cache_size}MB`;
 
         return mem_msg;
     }
 
     function wiredtiger() {
-        let wt = db.serverStatus().wiredTiger;
-	    let wt_cache_size = Math.round(wt.cache['bytes currently in the cache'] / 1048576);
+    	let server_status = db.serverStatus();
+        let wt = server_status.wiredTiger;
+	let wt_cache_size = Math.round(wt.cache['bytes currently in the cache'] / 1048576);
 
         // Cache reads
-	    let wt_cache_disk_reads = wt.cache['application threads page read from disk to cache count'];
+	let wt_cache_disk_reads = wt.cache['application threads page read from disk to cache count'];
         let wt_cache_disk_read_time = wt.cache['application threads page read from disk to cache time (usecs)'];
         let wt_cache_avg_reads = wt_cache_disk_read_time/1000/wt_cache_disk_reads;
 	    
@@ -190,6 +216,38 @@ let mpModule = (function() {
 	    return wt_msg;
     }
     
+    function search_score(collection_name, query, path) {
+        // Check for MongoDB Atlas, stage $search is only on MongoDB Atlas
+        if (!is_atlas) {
+            return atlas_hosted;
+        }
+
+        let collection = db.getCollection(collection_name);
+
+        collection.aggregate([
+            {
+                $search: {
+                    text: {
+                        query: query,
+                        path: path,
+                    },
+                },
+            },
+            {$limit: 3,},
+            {$project: {
+                name: 1,
+                score: { $meta: "searchScore" },
+            },
+            },
+        ]);
+    }
+
+    // Collections (alias: colls)
+    function colls() { return collections(); }
+    function collections() {
+        return db.getCollectionNames();
+    }
+
     // Expose the public functions
     return {
         version: version,
@@ -202,7 +260,10 @@ let mpModule = (function() {
 	    txn_counts: txn_counts,
         ping: ping,
 	    mem: mem,
-	    wiredtiger, wiredtiger
+	    wiredtiger: wiredtiger,
+        search_score: search_score,
+        colls, colls,
+        collections: collections
     };
 })();
 
