@@ -41,6 +41,27 @@ function _is_atlas() {
     return db.runCommand({ connectionStatus: 1 }).authInfo.isAtlas;
 }
 
+function _dict_str(dict) {
+    let length = Object.keys(dict).length;
+    var dict_str = "";
+    var i = 0;
+
+    for (var key in dict) {
+        // Add key and value
+        if (dict.hasOwnProperty(key)) {
+            dict_str += key + ": " + dict[key];
+        }
+
+        // Add newline if not the last line
+        if (i < length - 1) { dict_str += "\n"; }
+        
+        // Increment counter
+        i++;
+    }
+
+    return dict_str;
+}
+
 // Module
 let mpModule = (function() {
     let version = "0.1";
@@ -50,6 +71,26 @@ let mpModule = (function() {
     let server_build_info = db.serverBuildInfo();
     let is_atlas = _is_atlas();
     let server_version = _version();
+
+    // Version check that allow for dynamic calls.
+    // Example: _require_version(5), _require_version(4, 4), etc.
+    function _require_version(major) {
+        if (server_version.major != major) { return true; }
+    
+        let arg_len = arguments.length;
+    
+        if (arg_len > 1) { 
+            let minor = arguments[0];
+            if (server_version.minor != minor) { return true; }
+        }
+        
+        if (arg_len > 2) {
+            let patch = arguments[1];
+            if (server_version.patch != patch) { return true; }
+        }
+        
+        return false;
+    }
 
     function arch() {
         return db.serverBits();
@@ -106,7 +147,7 @@ let mpModule = (function() {
     function uptime() {
     	let server_status = db.serverStatus();
         
-	// Uptime
+	    // Uptime
         let uptime_seconds = server_status.uptime;
         let uptime_days = Math.floor(uptime_seconds / (24 * 60 * 60));
         let uptime_hours = Math.floor((uptime_seconds % (24 * 60 * 60)) / (60 * 60));
@@ -152,22 +193,26 @@ let mpModule = (function() {
     // MongoDB Performance Tuning, page 212
     function txn_counts() {
     	let server_status = db.serverStatus();
-	let ss_txns = server_status.transactions;
+	    let ss_txns = server_status.transactions;
     
-        print(ss_txns.totalStarted + 0, 'transactions started');
-        print(ss_txns.totalAborted + 0, 'transactions aborted');
-        print(ss_txns.totalCommitted + 0, 'transactions committed');
+        var txn_msg = [];
+
+        txn_msg.push(ss_txns.totalStarted + " txns started");
+        txn_msg.push(ss_txns.totalAborted + " txns aborted");
+        txn_msg.push(ss_txns.totalCommitted + " txns committed");
 
         var percentage_aborted = Math.round(ss_txns.totalAborted * 100 / ss_txns.totalStarted);
         if (ss_txns.totalStarted == 0) percentage_aborted = 0;
 
-        return percentage_aborted + "% txns aborted";
+        txn_msg.push(percentage_aborted + "% txns aborted");
+
+        return txn_msg.join("\n");
     }
 
     function ping() {
 	let start_time = new Date();
         let pong = db.runCommand("ping");
-	let end_time = new Date();
+	    let end_time = new Date();
         let time_diff = end_time - start_time;
         let ok = pong.ok;
         let ping_msg = "P0NG! " + time_diff + "ms, ok: " + ok;
@@ -191,10 +236,10 @@ let mpModule = (function() {
     function wiredtiger() {
     	let server_status = db.serverStatus();
         let wt = server_status.wiredTiger;
-	let wt_cache_size = Math.round(wt.cache['bytes currently in the cache'] / 1048576);
+	    let wt_cache_size = Math.round(wt.cache['bytes currently in the cache'] / 1048576);
 
         // Cache reads
-	let wt_cache_disk_reads = wt.cache['application threads page read from disk to cache count'];
+	    let wt_cache_disk_reads = wt.cache['application threads page read from disk to cache count'];
         let wt_cache_disk_read_time = wt.cache['application threads page read from disk to cache time (usecs)'];
         let wt_cache_avg_reads = wt_cache_disk_read_time/1000/wt_cache_disk_reads;
 	    
@@ -242,10 +287,29 @@ let mpModule = (function() {
         ]);
     }
 
+    function ops() {
+        let counters  = db.serverStatus()['opcounters'];
+        return _dict_str(counters);
+    }
+
+    function ops_repl() {
+        let counters  = db.serverStatus()['opcountersRepl'];
+        return _dict_str(counters);
+    }
+
+    function tls() {
+        let trans_sec = db.serverStatus()['transportSecurity'];
+        return _dict_str(trans_sec);
+    }
+
     // Collections (alias: colls)
     function colls() { return collections(); }
     function collections() {
         return db.getCollectionNames();
+    }
+
+    function conns() {
+        if (_require_version(5, 0)) { return "Requires version 5.0"; }
     }
 
     // Expose the public functions
@@ -262,8 +326,13 @@ let mpModule = (function() {
 	    mem: mem,
 	    wiredtiger: wiredtiger,
         search_score: search_score,
-        colls, colls,
-        collections: collections
+        colls: colls,
+        collections: collections,
+        ops: ops,
+        ops_repl: ops_repl,
+        tls: tls,
+        conns: conns
+
     };
 })();
 
