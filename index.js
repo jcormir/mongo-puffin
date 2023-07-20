@@ -312,6 +312,29 @@ let mpModule = (function() {
         if (_require_version(5, 0)) { return "Requires version 5.0"; }
     }
 
+    function whatsmyuri() {
+        let wmi = db.runCommand({ whatsmyuri: 1 });
+        return wmi.you;
+    }
+
+    function whoami() {
+        const conn_status = db.runCommand({ connectionStatus: 1 });
+        let auth_info = conn_status['authInfo'];
+        let whoami_msg = [];
+
+        if (conn_status.ok === 1) {
+            const auth_users = auth_info.authenticatedUsers;
+            const auth_roles = auth_info.authenticatedUserRoles;
+          
+            auth_users.forEach(user => whoami_msg.push(`${user.user}/${user.db}`));
+            auth_roles.forEach(role => whoami_msg.push(`${role.role}/${role.db}`));
+        } else {
+            print("Authentication information retrieval failed");
+        }
+
+        return whoami_msg.join("\n");
+    }
+
     // Expose the public functions
     return {
         version: version,
@@ -331,8 +354,9 @@ let mpModule = (function() {
         ops: ops,
         ops_repl: ops_repl,
         tls: tls,
-        conns: conns
-
+        conns: conns,
+        whatsmyuri: whatsmyuri,
+        whoami: whoami
     };
 })();
 
