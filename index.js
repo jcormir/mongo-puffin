@@ -92,6 +92,11 @@ let mpModule = (function() {
         return false;
     }
 
+    function _dbcmd(cmd) {
+        const cmd_result = db.runCommand(cmd);
+        return (cmd_result.ok === 1) ? cmd_result : null;
+    }
+
     function arch() {
         return db.serverBits();
     }
@@ -210,14 +215,14 @@ let mpModule = (function() {
     }
 
     function ping() {
-	let start_time = new Date();
+	    let start_time = new Date();
         let pong = db.runCommand("ping");
 	    let end_time = new Date();
         let time_diff = end_time - start_time;
         let ok = pong.ok;
         let ping_msg = "P0NG! " + time_diff + "ms, ok: " + ok;
 
-        if (timeDiff >= 100) ping_msg += ", high latency";
+        if (time_diff >= 100) ping_msg += ", high latency";
 
         return ping_msg;
     }
@@ -250,13 +255,13 @@ let mpModule = (function() {
 
         // Build WiredTiger command output
         wt_msg = `WiredTiger cache size: ${wt_cache_size}MB\n`;
-        wt_msg += `WiredTiger cache disk read count:  ${wt_cache_disk_reads}\n`
+        wt_msg += `WiredTiger cache disk read count: ${wt_cache_disk_reads}\n`
         wt_msg += `WiredTiger cache disk write count: ${wt_cache_disk_writes}\n`
-        wt_msg += `WiredTiger cache disk read time:  ${wt_cache_disk_read_time}ms\n`
+        wt_msg += `WiredTiger cache disk read time: ${wt_cache_disk_read_time}ms\n`
         wt_msg += `WiredTiger cache disk write time: ${wt_cache_disk_write_time}ms\n`
 
-        wt_msg += `Avg. disk read time:  ${wt_cache_avg_reads}ms`;
-        wt_msg += `Avg. disk write time: ${wt_cache_avg_writes}ms\n`;
+        wt_msg += `Avg. disk read time: ${wt_cache_avg_reads}ms\n`;
+        wt_msg += `Avg. disk write time: ${wt_cache_avg_writes}ms`;
 
 	    return wt_msg;
     }
@@ -319,10 +324,10 @@ let mpModule = (function() {
 
     function whoami() {
         const conn_status = db.runCommand({ connectionStatus: 1 });
-        let auth_info = conn_status['authInfo'];
         let whoami_msg = [];
 
         if (conn_status.ok === 1) {
+            let auth_info = conn_status['authInfo'];
             const auth_users = auth_info.authenticatedUsers;
             const auth_roles = auth_info.authenticatedUserRoles;
           
@@ -333,6 +338,11 @@ let mpModule = (function() {
         }
 
         return whoami_msg.join("\n");
+    }
+
+    function cmdline() {
+        const cmdline_results = _dbcmd({ getCmdLineOpts: 1 });
+        return cmdline_results['argv'].join(" ");
     }
 
     // Expose the public functions
@@ -356,7 +366,8 @@ let mpModule = (function() {
         tls: tls,
         conns: conns,
         whatsmyuri: whatsmyuri,
-        whoami: whoami
+        whoami: whoami,
+        cmdline: cmdline
     };
 })();
 
