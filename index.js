@@ -62,6 +62,15 @@ function _dict_str(dict) {
     return dict_str;
 }
 
+/**
+ * Converts number of bytes to number of megabytes
+ * @param {number} num Number of bytes to convert 
+ * @returns {number} Conversion to megabytes
+ */
+function to_mb(num) {
+    return Math.round(num / 1048576);
+}
+
 // Module
 let mpModule = (function() {
     let version = "0.1";
@@ -97,11 +106,11 @@ let mpModule = (function() {
         return (cmd_result.ok === 1) ? cmd_result : null;
     }
 
-    function arch() {
+    function _arch() {
         return db.serverBits();
     }
 
-    function uname() {
+    function _uname() {
         let system_hostname = host_info['system']['hostname'];
         let os_type = host_info['os']['type'];
         let extra_version = host_info['extra']['versionString'];
@@ -114,7 +123,7 @@ let mpModule = (function() {
         return values.join(" ");
     }
 
-    function os() {
+    function _os() {
         let os_name = host_info['os']['name'];
         let os_type = host_info['os']['type'];
         let os_version = host_info['os']['version'];
@@ -128,14 +137,14 @@ let mpModule = (function() {
         return values.join(" ");
     }
     
-    function time() {
+    function _time() {
         let iso_date = host_info['system']['currentTime']
         let human_readable_date = iso_date.toString();
         
         return human_readable_date;
     }
 
-    function mname() {
+    function _mname() {
         let mongo_version = server_build_info['version'];
         let mongo_git_version = server_build_info['gitVersion'];
 
@@ -149,7 +158,7 @@ let mpModule = (function() {
         .join(" ");
     }
 
-    function uptime() {
+    function _uptime() {
     	let server_status = db.serverStatus();
         
 	    // Uptime
@@ -196,16 +205,16 @@ let mpModule = (function() {
     }
 
     // MongoDB Performance Tuning, page 212
-    function txn_counts() {
+    function _txn_counts() {
     	let server_status = db.serverStatus();
 	    let ss_txns = server_status.transactions;
-    
         var txn_msg = [];
 
         txn_msg.push(ss_txns.totalStarted + " txns started");
         txn_msg.push(ss_txns.totalAborted + " txns aborted");
         txn_msg.push(ss_txns.totalCommitted + " txns committed");
 
+        // Calculate percentage aborted, show 0 if none started.
         var percentage_aborted = Math.round(ss_txns.totalAborted * 100 / ss_txns.totalStarted);
         if (ss_txns.totalStarted == 0) percentage_aborted = 0;
 
@@ -214,7 +223,7 @@ let mpModule = (function() {
         return txn_msg.join("\n");
     }
 
-    function ping() {
+    function _ping() {
 	    let start_time = new Date();
         let pong = db.runCommand("ping");
 	    let end_time = new Date();
@@ -227,9 +236,10 @@ let mpModule = (function() {
         return ping_msg;
     }
 
-    function mem() {
+    function _mem() {
     	let server_stats = db.serverStatus();
-        let wired_tiger_cache_size = Math.round(server_stats.wiredTiger.cache['bytes currently in the cache'] / 1048576);
+        let wt_cache_current_bytes = wt.cache['bytes currently in the cache'];
+        let wired_tiger_cache_size = to_mb(wt_cache_current_bytes);
 
         mem_msg = `Mongod virtual memory:  ${server_stats.mem.virtual}MB\n`;
         mem_msg += `Mongod resident memory: ${server_stats.mem.resident}MB\n`;
@@ -238,10 +248,11 @@ let mpModule = (function() {
         return mem_msg;
     }
 
-    function wiredtiger() {
+    function _wiredtiger() {
     	let server_status = db.serverStatus();
         let wt = server_status.wiredTiger;
-	    let wt_cache_size = Math.round(wt.cache['bytes currently in the cache'] / 1048576);
+	    let wt_cache_current_bytes = wt.cache['bytes currently in the cache'];
+        let wt_cache_size = to_mb(wt_cache_current_bytes);
 
         // Cache reads
 	    let wt_cache_disk_reads = wt.cache['application threads page read from disk to cache count'];
@@ -266,7 +277,7 @@ let mpModule = (function() {
 	    return wt_msg;
     }
     
-    function search_score(collection_name, query, path) {
+    function _search_score(collection_name, query, path) {
         // Check for MongoDB Atlas, stage $search is only on MongoDB Atlas
         if (!is_atlas) {
             return atlas_hosted;
@@ -292,37 +303,37 @@ let mpModule = (function() {
         ]);
     }
 
-    function ops() {
+    function _ops() {
         let counters  = db.serverStatus()['opcounters'];
         return _dict_str(counters);
     }
 
-    function ops_repl() {
+    function _ops_repl() {
         let counters  = db.serverStatus()['opcountersRepl'];
         return _dict_str(counters);
     }
 
-    function tls() {
+    function _tls() {
         let trans_sec = db.serverStatus()['transportSecurity'];
         return _dict_str(trans_sec);
     }
 
     // Collections (alias: colls)
-    function colls() { return collections(); }
-    function collections() {
+    function _colls() { return collections(); }
+    function _collections() {
         return db.getCollectionNames();
     }
 
-    function conns() {
+    function _conns() {
         if (_require_version(5, 0)) { return "Requires version 5.0"; }
     }
 
-    function whatsmyuri() {
+    function _whatsmyuri() {
         let wmi = db.runCommand({ whatsmyuri: 1 });
         return wmi.you;
     }
 
-    function whoami() {
+    function _whoami() {
         const conn_status = db.runCommand({ connectionStatus: 1 });
         let whoami_msg = [];
 
@@ -340,34 +351,50 @@ let mpModule = (function() {
         return whoami_msg.join("\n");
     }
 
-    function cmdline() {
+    /**
+     * Outputs command line options used to start mongo
+     * @returns {string} String of command line options
+     */
+    function _cmdline() {
         const cmdline_results = _dbcmd({ getCmdLineOpts: 1 });
         return cmdline_results['argv'].join(" ");
+    }
+
+    /**
+     * Outputs supported storage engines
+     * @returns {string} String of supported storage engines
+     */
+    function _engines() {
+        const engines_results = _dbcmd({ buildInfo: 1 });
+
+        if (engines_results)
+            return engines_results['storageEngines'].join("\n");
     }
 
     // Expose the public functions
     return {
         version: version,
-        arch: arch,
-        uname: uname,
-        os: os,
-        time: time,
-        mname: mname,
-        uptime: uptime,
-	    txn_counts: txn_counts,
-        ping: ping,
-	    mem: mem,
-	    wiredtiger: wiredtiger,
-        search_score: search_score,
-        colls: colls,
-        collections: collections,
-        ops: ops,
-        ops_repl: ops_repl,
-        tls: tls,
-        conns: conns,
-        whatsmyuri: whatsmyuri,
-        whoami: whoami,
-        cmdline: cmdline
+        arch: _arch,
+        uname: _uname,
+        os: _os,
+        time: _time,
+        mname: _mname,
+        uptime: _uptime,
+	    txn_counts: _txn_counts,
+        ping: _ping,
+	    mem: _mem,
+	    wiredtiger: _wiredtiger,
+        search_score: _search_score,
+        colls: _colls,
+        collections: _collections,
+        ops: _ops,
+        ops_repl: _ops_repl,
+        tls: _tls,
+        conns: _conns,
+        whatsmyuri: _whatsmyuri,
+        whoami: _whoami,
+        cmdline: _cmdline,
+        engines: _engines
     };
 })();
 
