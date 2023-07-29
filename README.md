@@ -1,5 +1,7 @@
 # mongo-puffin
 
+![Mongo Puffin](puffin.svg)
+
 MongoDB tools that you didn't know you needed until now
 
 ## Commands
@@ -22,6 +24,8 @@ MongoDB tools that you didn't know you needed until now
 - arch
 - whoami
 - whatsmyuri
+- engines
+- cmdline
 
 ## Repository Illustration
 
