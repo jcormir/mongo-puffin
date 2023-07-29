@@ -4,6 +4,10 @@
 
 MongoDB tools that you didn't know you needed until now
 
+- [Commands](#commands)
+- [Examples](#examples)
+- [Repository Illustration](#repository-illustration)
+
 ## Commands
 
 - ping
